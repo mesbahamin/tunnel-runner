@@ -23,6 +23,7 @@ typedef uint64_t uint64;
 
 #define BYTES_PER_PIXEL 4
 #define MAX_CONTROLLERS 4
+#define MOVEMENT_SPEED 5
 
 
 struct SDLOffscreenBuffer
@@ -276,6 +277,43 @@ int main(void)
                         running = false;
                     }
                 }
+
+                SDL_PumpEvents();
+                const uint8 *keystate = SDL_GetKeyboardState(0);
+
+                if (keystate[SDL_SCANCODE_A])
+                {
+                    x_offset -= MOVEMENT_SPEED;
+                }
+                if (keystate[SDL_SCANCODE_D])
+                {
+                    x_offset += MOVEMENT_SPEED;
+                }
+                if (keystate[SDL_SCANCODE_W])
+                {
+                    y_offset -= MOVEMENT_SPEED;
+                }
+                if (keystate[SDL_SCANCODE_S])
+                {
+                    y_offset += MOVEMENT_SPEED;
+                }
+                if (keystate[SDL_SCANCODE_LEFT])
+                {
+                    x_offset --;
+                }
+                if (keystate[SDL_SCANCODE_RIGHT])
+                {
+                    x_offset ++;
+                }
+                if (keystate[SDL_SCANCODE_UP])
+                {
+                    y_offset --;
+                }
+                if (keystate[SDL_SCANCODE_DOWN])
+                {
+                    y_offset ++;
+                }
+
 
                 for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
                 {
