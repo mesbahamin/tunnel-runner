@@ -45,6 +45,54 @@ struct SDLWindowDimension
 global_variable SDLOffscreenBuffer global_back_buffer;
 
 
+internal void
+render_mosaic(SDLOffscreenBuffer buffer, int x_offset, int y_offset, char color_choice)
+{
+    uint8 *row = (uint8 *)buffer.memory;
+
+    for (int y = 0; y < buffer.height; ++y)
+    {
+        uint32 *pixel = (uint32 *)row;
+
+        for (int x = 0; x < buffer.width; ++x)
+        {
+            uint8 x_factor = (x + x_offset);
+            uint8 y_factor = (y + y_offset);
+            uint8 color_value (x_factor * x_factor * y_factor * y_factor);
+            uint32 red = color_value << 16;
+            uint32 green = color_value << 8;
+            uint32 blue = color_value;
+
+            switch(color_choice)
+            {
+                case 'g':
+                {
+                    *pixel++ = green;
+                } break;
+                case 'r':
+                {
+                    *pixel++ = red;
+                } break;
+                case 'b':
+                {
+                    *pixel++ = blue;
+                } break;
+                case 'y':
+                {
+                    *pixel++ = red | green;
+                } break;
+                default:
+                {
+                    *pixel++ = red | green | blue;
+                } break;
+            }
+        }
+
+        row += buffer.pitch;
+    }
+}
+
+
 SDLWindowDimension
 sdl_get_window_dimension(SDL_Window *window)
 {
@@ -167,6 +215,9 @@ int main(void)
             SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
+            int x_offset = 0;
+            int y_offset = 0;
+
             while (running)
             {
                 SDL_Event event;
@@ -179,6 +230,10 @@ int main(void)
                     }
                 }
 
+                x_offset++;
+                y_offset++;
+
+                render_mosaic(global_back_buffer, x_offset, y_offset, 'g');
                 sdl_update_window(window, renderer, global_back_buffer);
             }
         }
