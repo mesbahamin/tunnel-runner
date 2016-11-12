@@ -22,6 +22,7 @@ typedef uint32_t uint32;
 typedef uint64_t uint64;
 
 #define BYTES_PER_PIXEL 4
+#define MAX_CONTROLLERS 4
 
 
 struct SDLOffscreenBuffer
@@ -43,6 +44,8 @@ struct SDLWindowDimension
 
 
 global_variable SDLOffscreenBuffer global_back_buffer;
+global_variable SDL_GameController *controller_handles[MAX_CONTROLLERS];
+global_variable SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
 
 
 internal void
@@ -190,12 +193,55 @@ handle_event(SDL_Event *event)
 }
 
 
+internal void
+sdl_open_game_controllers()
+{
+    int num_joysticks = SDL_NumJoysticks();
+    for (int controller_index = 0; controller_index < num_joysticks; ++controller_index)
+    {
+        if (!SDL_IsGameController(controller_index))
+        {
+            continue;
+        }
+
+        if (controller_index >= MAX_CONTROLLERS)
+        {
+            break;
+        }
+
+        controller_handles[controller_index] = SDL_GameControllerOpen(controller_index);
+        rumble_handles[controller_index] = SDL_HapticOpen(controller_index);
+
+        if (rumble_handles[controller_index] && SDL_HapticRumbleInit(rumble_handles[controller_index]) != 0)
+        {
+            SDL_HapticClose(rumble_handles[controller_index]);
+            rumble_handles[controller_index] = 0;
+        }
+    }
+}
+
+
+internal void
+sdl_close_game_controllers()
+{
+    for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+    {
+        if (controller_handles[controller_index])
+        {
+            SDL_GameControllerClose(controller_handles[controller_index]);
+        }
+    }
+}
+
+
 int main(void)
 {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC) != 0)
     {
         // TODO(amin): log SDL_Init error
     }
+
+    sdl_open_game_controllers();
 
     SDL_Window *window = SDL_CreateWindow(
             "Tunnel Flyer",
@@ -217,6 +263,7 @@ int main(void)
 
             int x_offset = 0;
             int y_offset = 0;
+            char color_choice = '\0';
 
             while (running)
             {
@@ -230,10 +277,58 @@ int main(void)
                     }
                 }
 
-                x_offset++;
-                y_offset++;
+                for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+                {
+                    if (SDL_GameControllerGetAttached(controller_handles[controller_index]))
+                    {
+                        bool start = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_START);
+                        bool back = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_BACK);
+                        bool a_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_A);
+                        bool b_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_B);
+                        bool x_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_X);
+                        bool y_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_Y);
 
-                render_mosaic(global_back_buffer, x_offset, y_offset, 'g');
+                        int16 stick_leftx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTX);
+                        int16 stick_lefty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTY);
+
+                        if (start)
+                        {
+                            SDL_HapticRumblePlay(rumble_handles[controller_index], 0.5f, 2000);
+                        }
+                        else
+                        {
+                            SDL_HapticRumbleStop(rumble_handles[controller_index]);
+                        }
+
+                        if (back)
+                        {
+                            running = false;
+                        }
+
+                        // NOTE(amin): Buttons select colors.
+                        if (a_button)
+                        {
+                            color_choice = 'g';
+                        }
+                        if (b_button)
+                        {
+                            color_choice = 'r';
+                        }
+                        if (x_button)
+                        {
+                            color_choice = 'b';
+                        }
+                        if (y_button)
+                        {
+                            color_choice = 'y';
+                        }
+
+                        x_offset += stick_leftx / 5000;
+                        y_offset += stick_lefty / 5000;
+                    }
+                }
+
+                render_mosaic(global_back_buffer, x_offset, y_offset, color_choice);
                 sdl_update_window(window, renderer, global_back_buffer);
             }
         }
@@ -247,6 +342,7 @@ int main(void)
         // TODO(amin): log SDL_Window error
     }
 
+    sdl_close_game_controllers();
     SDL_Quit();
     return(0);
 }
