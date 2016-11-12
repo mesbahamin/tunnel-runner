@@ -1,3 +1,4 @@
+#include <cmath>
 #include <SDL.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -173,7 +174,8 @@ handle_event(SDL_Event *event)
                     SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
                     SDL_Renderer *renderer = SDL_GetRenderer(window);
                     printf("SDL_WINDOWEVENT_SIZE_CHANGED (%d, %d)\n", event->window.data1, event->window.data2);
-                    sdl_resize_texture(&global_back_buffer, renderer, event->window.data1, event->window.data2);
+                    // TODO(amin): Why does this segfault?
+                    //sdl_resize_texture(&global_back_buffer, renderer, event->window.data1, event->window.data2);
                 } break;
 
                 case SDL_WINDOWEVENT_FOCUS_GAINED:
@@ -262,8 +264,41 @@ int main(void)
             SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
-            int x_offset = 0;
-            int y_offset = 0;
+            int tex_width = 256;
+            int tex_height = 256;
+            int screen_width = dimension.width;
+            int screen_height = dimension.height;
+
+            uint32 texture[tex_width][tex_height];
+            int distance_table[screen_height][screen_width];
+            int angle_table[screen_height][screen_width];
+
+            // Make XOR texture
+            for (int y = 0; y < tex_height; ++y)
+            {
+                for (int x = 0; x < tex_width; ++x)
+                {
+                    texture[y][x] = (x * 256 / tex_width) ^ (y * 256 / tex_height);
+                }
+            }
+
+            // Make distance and angle transformation tables
+            for (int y = 0; y < screen_height; ++y)
+            {
+                for (int x = 0; x < screen_width; ++x)
+                {
+                    float ratio = 32.0;
+                    int distance = (int)(ratio * tex_height / sqrt(
+                            (x - screen_width / 2.0) * (x - screen_width / 2.0) + (y - screen_height / 2.0) * (y - screen_height / 2.0))
+                    ) % tex_height;
+                    int angle = (unsigned int)(0.5 * tex_width * atan2(y - screen_height / 2.0, x - screen_width / 2.0) / 3.1416);
+                    distance_table[y][x] = distance;
+                    angle_table[y][x] = angle;
+                }
+            }
+
+            int rotation_offset = 0;
+            int translation_offset = 0;
             char color_choice = '\0';
 
             while (running)
@@ -283,35 +318,35 @@ int main(void)
 
                 if (keystate[SDL_SCANCODE_A])
                 {
-                    x_offset -= MOVEMENT_SPEED;
+                    rotation_offset -= MOVEMENT_SPEED;
                 }
                 if (keystate[SDL_SCANCODE_D])
                 {
-                    x_offset += MOVEMENT_SPEED;
+                    rotation_offset += MOVEMENT_SPEED;
                 }
                 if (keystate[SDL_SCANCODE_W])
                 {
-                    y_offset -= MOVEMENT_SPEED;
+                    translation_offset += MOVEMENT_SPEED;
                 }
                 if (keystate[SDL_SCANCODE_S])
                 {
-                    y_offset += MOVEMENT_SPEED;
+                    translation_offset -= MOVEMENT_SPEED;
                 }
                 if (keystate[SDL_SCANCODE_LEFT])
                 {
-                    x_offset --;
+                    rotation_offset --;
                 }
                 if (keystate[SDL_SCANCODE_RIGHT])
                 {
-                    x_offset ++;
+                    rotation_offset ++;
                 }
                 if (keystate[SDL_SCANCODE_UP])
                 {
-                    y_offset --;
+                    translation_offset ++;
                 }
                 if (keystate[SDL_SCANCODE_DOWN])
                 {
-                    y_offset ++;
+                    translation_offset --;
                 }
 
 
@@ -361,12 +396,25 @@ int main(void)
                             color_choice = 'y';
                         }
 
-                        x_offset += stick_leftx / 5000;
-                        y_offset += stick_lefty / 5000;
+                        rotation_offset += stick_leftx / 5000;
+                        translation_offset -= stick_lefty / 5000;
                     }
                 }
 
-                render_mosaic(global_back_buffer, x_offset, y_offset, color_choice);
+                // Transform texture and draw to buffer
+                uint8 *row = (uint8 *)global_back_buffer.memory;
+                for (int y = 0; y < global_back_buffer.height; ++y)
+                {
+                    uint32 *pixel = (uint32 *)row;
+                    for (int x = 0; x < global_back_buffer.width; ++x)
+                    {
+                        int color = texture[(unsigned int)(distance_table[y][x] + translation_offset) % tex_width]
+                                           [(unsigned int)(angle_table[y][x] + rotation_offset) % tex_height];
+                        *pixel++ = color;
+                    }
+                    row += global_back_buffer.pitch;
+                }
+                //render_mosaic(global_back_buffer, rotation_offset, translation_offset, color_choice);
                 sdl_update_window(window, renderer, global_back_buffer);
             }
         }
