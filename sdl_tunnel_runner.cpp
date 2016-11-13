@@ -22,9 +22,14 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+// TODO(amin): Make screen size adjustable
+#define SCREEN_WIDTH 640
+#define SCREEN_HEIGHT 480
 #define BYTES_PER_PIXEL 4
 #define MAX_CONTROLLERS 4
 #define MOVEMENT_SPEED 5
+#define CONTROLLER_STICK_MAX 32770
+#define CONTROLLER_STICK_MIN -32770
 
 
 struct SDLOffscreenBuffer
@@ -85,6 +90,14 @@ render_mosaic(SDLOffscreenBuffer buffer, int x_offset, int y_offset, char color_
                 case 'y':
                 {
                     *pixel++ = red | green;
+                } break;
+                case 'm':
+                {
+                    *pixel++ = red | blue;
+                } break;
+                case 'c':
+                {
+                    *pixel++ = blue | green;
                 } break;
                 default:
                 {
@@ -187,7 +200,7 @@ handle_event(SDL_Event *event)
                 {
                     SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
                     SDL_Renderer *renderer = SDL_GetRenderer(window);
-                    sdl_update_window(window, renderer, global_back_buffer);
+                    //sdl_update_window(window, renderer, global_back_buffer);
                 } break;
             }
         } break;
@@ -250,9 +263,9 @@ int main(void)
             "Tunnel Flyer",
             SDL_WINDOWPOS_UNDEFINED,
             SDL_WINDOWPOS_UNDEFINED,
-            640,
-            480,
-            SDL_WINDOW_RESIZABLE);
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+            0);
 
     if (window)
     {
@@ -266,12 +279,10 @@ int main(void)
 
             int tex_width = 256;
             int tex_height = 256;
-            int screen_width = dimension.width;
-            int screen_height = dimension.height;
 
             uint32 texture[tex_width][tex_height];
-            int distance_table[screen_height][screen_width];
-            int angle_table[screen_height][screen_width];
+            global_variable int distance_table[2 * SCREEN_HEIGHT][2 * SCREEN_WIDTH];
+            global_variable int angle_table[2 * SCREEN_HEIGHT][2 * SCREEN_WIDTH];
 
             // Make XOR texture
             for (int y = 0; y < tex_height; ++y)
@@ -283,15 +294,15 @@ int main(void)
             }
 
             // Make distance and angle transformation tables
-            for (int y = 0; y < screen_height; ++y)
+            for (int y = 0; y < 2 * SCREEN_HEIGHT; ++y)
             {
-                for (int x = 0; x < screen_width; ++x)
+                for (int x = 0; x < 2 * SCREEN_WIDTH; ++x)
                 {
                     float ratio = 32.0;
-                    int distance = (int)(ratio * tex_height / sqrt(
-                            (x - screen_width / 2.0) * (x - screen_width / 2.0) + (y - screen_height / 2.0) * (y - screen_height / 2.0))
-                    ) % tex_height;
-                    int angle = (unsigned int)(0.5 * tex_width * atan2(y - screen_height / 2.0, x - screen_width / 2.0) / 3.1416);
+                    int distance = int(ratio * tex_height / sqrt(
+                            float((x - SCREEN_WIDTH) * (x - SCREEN_WIDTH) + (y - SCREEN_HEIGHT) * (y - SCREEN_HEIGHT))
+                        )) % tex_height;
+                    int angle = (unsigned int)(0.5 * tex_width * atan2(float(y - SCREEN_HEIGHT), float(x - SCREEN_WIDTH)) / 3.1416);
                     distance_table[y][x] = distance;
                     angle_table[y][x] = angle;
                 }
@@ -299,6 +310,8 @@ int main(void)
 
             int rotation_offset = 0;
             int translation_offset = 0;
+            int look_shift_x = SCREEN_WIDTH / 2;
+            int look_shift_y = SCREEN_HEIGHT / 2;
             char color_choice = '\0';
 
             while (running)
@@ -360,13 +373,18 @@ int main(void)
                         bool b_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_B);
                         bool x_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_X);
                         bool y_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_Y);
+                        bool left_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+                        bool right_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
 
                         int16 stick_leftx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTX);
                         int16 stick_lefty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTY);
+                        int16 stick_rightx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTX);
+                        int16 stick_righty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTY);
 
                         if (start)
                         {
                             SDL_HapticRumblePlay(rumble_handles[controller_index], 0.5f, 2000);
+                            color_choice = '\0';
                         }
                         else
                         {
@@ -395,9 +413,30 @@ int main(void)
                         {
                             color_choice = 'y';
                         }
+                        if (left_shoulder)
+                        {
+                            color_choice = 'm';
+                        }
+                        if (right_shoulder)
+                        {
+                            color_choice = 'c';
+                        }
 
                         rotation_offset += stick_leftx / 5000;
                         translation_offset -= stick_lefty / 5000;
+
+                        int dampened_x_max = SCREEN_WIDTH / 2;
+                        int dampened_x_min = -(SCREEN_WIDTH / 2);
+                        int dampened_y_max = SCREEN_HEIGHT / 2;
+                        int dampened_y_min = -(SCREEN_HEIGHT / 2);
+
+                        int dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
+                        int dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
+
+                        look_shift_x = SCREEN_WIDTH / 2 + dampened_x;
+                        look_shift_y = SCREEN_HEIGHT / 2 + dampened_y;
+                        //printf("screen_width / 2: %d\t damp_x: %d\t raw_x: %d\n", screen_width / 2, dampened_x, stick_rightx);
+                        //printf("screen_height / 2: %d\t damp_y: %d\t raw_y: %d\n", screen_height / 2, dampened_y, stick_righty);
                     }
                 }
 
@@ -408,9 +447,45 @@ int main(void)
                     uint32 *pixel = (uint32 *)row;
                     for (int x = 0; x < global_back_buffer.width; ++x)
                     {
-                        int color = texture[(unsigned int)(distance_table[y][x] + translation_offset) % tex_width]
-                                           [(unsigned int)(angle_table[y][x] + rotation_offset) % tex_height];
-                        *pixel++ = color;
+                        int color = texture[(unsigned int)(distance_table[y + look_shift_y][x + look_shift_x] + translation_offset) % tex_width]
+                                           [(unsigned int)(angle_table[y + look_shift_y][x + look_shift_x] + rotation_offset) % tex_height];
+
+                        uint32 red = color << 16;
+                        uint32 green = color << 8;
+                        uint32 blue = color;
+
+                        // TODO(amin): Make a color choice enum
+                        switch(color_choice)
+                        {
+                            case 'g':
+                            {
+                                *pixel++ = green;
+                            } break;
+                            case 'r':
+                            {
+                                *pixel++ = red;
+                            } break;
+                            case 'b':
+                            {
+                                *pixel++ = blue;
+                            } break;
+                            case 'y':
+                            {
+                                *pixel++ = red | green;
+                            } break;
+                            case 'm':
+                            {
+                                *pixel++ = red | blue;
+                            } break;
+                            case 'c':
+                            {
+                                *pixel++ = blue | green;
+                            } break;
+                            default:
+                            {
+                                *pixel++ = red | green | blue;
+                            } break;
+                        }
                     }
                     row += global_back_buffer.pitch;
                 }

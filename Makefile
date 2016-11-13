@@ -1,7 +1,7 @@
 build:
-	g++ -std=c++11 -Wall -Wextra -g sdl_tunnel_flyer.cpp -o tunnel-flyer `sdl2-config --cflags --libs`
+	g++ -std=c++11 -Wall -Wextra -g sdl_tunnel_runner.cpp -o tunnel-runner `sdl2-config --cflags --libs`
 
 run:
-	./tunnel-flyer
+	./tunnel-runner
 
 test: build run
