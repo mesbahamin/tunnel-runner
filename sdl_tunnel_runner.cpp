@@ -22,9 +22,10 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
-// TODO(amin): Make screen size adjustable
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
+#define TEX_WIDTH 256
+#define TEX_HEIGHT 256
 #define BYTES_PER_PIXEL 4
 #define MAX_CONTROLLERS 4
 #define MOVEMENT_SPEED 5
@@ -42,17 +43,26 @@ struct SDLOffscreenBuffer
     int pitch;
 };
 
-
 struct SDLWindowDimension
 {
     int width;
     int height;
 };
 
+struct TransformData
+{
+    int width;
+    int height;
+    int **distance_table;
+    int **angle_table;
+    int look_shift_x;
+    int look_shift_y;
+};
 
 global_variable SDLOffscreenBuffer global_back_buffer;
 global_variable SDL_GameController *controller_handles[MAX_CONTROLLERS];
 global_variable SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
+global_variable TransformData transform;
 
 
 internal void
@@ -133,6 +143,23 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
         SDL_DestroyTexture(buffer->texture);
     }
 
+    if (transform.distance_table)
+    {
+        for (int y = 0; y < transform.height; ++y)
+        {
+            munmap(transform.distance_table[y], transform.width * sizeof(int));
+        }
+        munmap(transform.distance_table, transform.height * sizeof(int *));
+    }
+    if (transform.angle_table)
+    {
+        for (int y = 0; y < transform.height; ++y)
+        {
+            munmap(transform.angle_table[y], transform.width * sizeof(int));
+        }
+        munmap(transform.angle_table, transform.height * sizeof(int *));
+    }
+
     buffer->texture = SDL_CreateTexture(
             renderer,
             SDL_PIXELFORMAT_ARGB8888,
@@ -149,6 +176,55 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE | MAP_ANONYMOUS,
             -1, 0);
+
+    transform.width = 2 * width;
+    transform.height = 2 * height;
+    transform.look_shift_x = width / 2;
+    transform.look_shift_y = height / 2;
+    transform.distance_table = (int **)mmap(
+            0,
+            transform.height * sizeof(int *),
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1, 0);
+
+    transform.angle_table = (int **)mmap(
+            0,
+            transform.height * sizeof(int *),
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1, 0);
+
+    for (int y = 0; y < transform.height; ++y)
+    {
+        transform.distance_table[y] = (int *)mmap(
+                0,
+                transform.width * sizeof(int),
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS,
+                -1, 0);
+        transform.angle_table[y] = (int *)mmap(
+                0,
+                transform.width * sizeof(int),
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS,
+                -1, 0);
+    }
+
+    // Make distance and angle transformation tables
+    for (int y = 0; y < transform.height; ++y)
+    {
+        for (int x = 0; x < transform.width; ++x)
+        {
+            float ratio = 32.0;
+            int distance = int(ratio * TEX_HEIGHT / sqrt(
+                    float((x - width) * (x - width) + (y - height) * (y - height))
+                )) % TEX_HEIGHT;
+            int angle = (unsigned int)(0.5 * TEX_WIDTH * atan2(float(y - height), float(x - width)) / 3.1416);
+            transform.distance_table[y][x] = distance;
+            transform.angle_table[y][x] = angle;
+        }
+    }
 }
 
 
@@ -187,8 +263,7 @@ handle_event(SDL_Event *event)
                     SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
                     SDL_Renderer *renderer = SDL_GetRenderer(window);
                     printf("SDL_WINDOWEVENT_SIZE_CHANGED (%d, %d)\n", event->window.data1, event->window.data2);
-                    // TODO(amin): Why does this segfault?
-                    //sdl_resize_texture(&global_back_buffer, renderer, event->window.data1, event->window.data2);
+                    sdl_resize_texture(&global_back_buffer, renderer, event->window.data1, event->window.data2);
                 } break;
 
                 case SDL_WINDOWEVENT_FOCUS_GAINED:
@@ -200,7 +275,7 @@ handle_event(SDL_Event *event)
                 {
                     SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
                     SDL_Renderer *renderer = SDL_GetRenderer(window);
-                    //sdl_update_window(window, renderer, global_back_buffer);
+                    sdl_update_window(window, renderer, global_back_buffer);
                 } break;
             }
         } break;
@@ -273,45 +348,26 @@ int main(void)
 
         if (renderer)
         {
-            bool running = true;
             SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
-            int tex_width = 256;
-            int tex_height = 256;
 
-            uint32 texture[tex_width][tex_height];
-            global_variable int distance_table[2 * SCREEN_HEIGHT][2 * SCREEN_WIDTH];
-            global_variable int angle_table[2 * SCREEN_HEIGHT][2 * SCREEN_WIDTH];
+            uint32 texture[TEX_HEIGHT][TEX_WIDTH];
 
             // Make XOR texture
-            for (int y = 0; y < tex_height; ++y)
+            for (int y = 0; y < TEX_HEIGHT; ++y)
             {
-                for (int x = 0; x < tex_width; ++x)
+                for (int x = 0; x < TEX_WIDTH; ++x)
                 {
-                    texture[y][x] = (x * 256 / tex_width) ^ (y * 256 / tex_height);
+                    texture[y][x] = (x * 256 / TEX_WIDTH) ^ (y * 256 / TEX_HEIGHT);
+                    //texture[y][x]= (x * x * y * y);
                 }
             }
 
-            // Make distance and angle transformation tables
-            for (int y = 0; y < 2 * SCREEN_HEIGHT; ++y)
-            {
-                for (int x = 0; x < 2 * SCREEN_WIDTH; ++x)
-                {
-                    float ratio = 32.0;
-                    int distance = int(ratio * tex_height / sqrt(
-                            float((x - SCREEN_WIDTH) * (x - SCREEN_WIDTH) + (y - SCREEN_HEIGHT) * (y - SCREEN_HEIGHT))
-                        )) % tex_height;
-                    int angle = (unsigned int)(0.5 * tex_width * atan2(float(y - SCREEN_HEIGHT), float(x - SCREEN_WIDTH)) / 3.1416);
-                    distance_table[y][x] = distance;
-                    angle_table[y][x] = angle;
-                }
-            }
 
+            bool running = true;
             int rotation_offset = 0;
             int translation_offset = 0;
-            int look_shift_x = SCREEN_WIDTH / 2;
-            int look_shift_y = SCREEN_HEIGHT / 2;
             char color_choice = '\0';
 
             while (running)
@@ -327,6 +383,9 @@ int main(void)
                 }
 
                 SDL_PumpEvents();
+
+                dimension = sdl_get_window_dimension(window);
+
                 const uint8 *keystate = SDL_GetKeyboardState(0);
 
                 if (keystate[SDL_SCANCODE_A])
@@ -425,18 +484,18 @@ int main(void)
                         rotation_offset += stick_leftx / 5000;
                         translation_offset -= stick_lefty / 5000;
 
-                        int dampened_x_max = SCREEN_WIDTH / 2;
-                        int dampened_x_min = -(SCREEN_WIDTH / 2);
-                        int dampened_y_max = SCREEN_HEIGHT / 2;
-                        int dampened_y_min = -(SCREEN_HEIGHT / 2);
+                        int dampened_x_max = dimension.width / 2;
+                        int dampened_x_min = -(dimension.width / 2);
+                        int dampened_y_max = dimension.height / 2;
+                        int dampened_y_min = -(dimension.height / 2);
 
                         int dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
                         int dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
 
-                        look_shift_x = SCREEN_WIDTH / 2 + dampened_x;
-                        look_shift_y = SCREEN_HEIGHT / 2 + dampened_y;
-                        //printf("screen_width / 2: %d\t damp_x: %d\t raw_x: %d\n", screen_width / 2, dampened_x, stick_rightx);
-                        //printf("screen_height / 2: %d\t damp_y: %d\t raw_y: %d\n", screen_height / 2, dampened_y, stick_righty);
+                        transform.look_shift_x = dimension.width / 2 + dampened_x;
+                        transform.look_shift_y = dimension.height / 2 + dampened_y;
+                        //printf("dimension.width / 2: %d\t damp_x: %d\t raw_x: %d\n", dimension.width / 2, dampened_x, stick_rightx);
+                        //printf("dimension.height / 2: %d\t damp_y: %d\t raw_y: %d\n", dimension.height / 2, dampened_y, stick_righty);
                     }
                 }
 
@@ -447,8 +506,8 @@ int main(void)
                     uint32 *pixel = (uint32 *)row;
                     for (int x = 0; x < global_back_buffer.width; ++x)
                     {
-                        int color = texture[(unsigned int)(distance_table[y + look_shift_y][x + look_shift_x] + translation_offset) % tex_width]
-                                           [(unsigned int)(angle_table[y + look_shift_y][x + look_shift_x] + rotation_offset) % tex_height];
+                        int color = texture[(unsigned int)(transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x] + translation_offset) % TEX_WIDTH]
+                                           [(unsigned int)(transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x] + rotation_offset) % TEX_HEIGHT];
 
                         uint32 red = color << 16;
                         uint32 green = color << 8;
