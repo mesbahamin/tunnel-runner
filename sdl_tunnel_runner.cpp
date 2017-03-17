@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/mman.h>
+#include <time.h>
+#include <unistd.h>
 
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
@@ -31,6 +33,12 @@ typedef uint64_t uint64;
 #define MOVEMENT_SPEED 5
 #define CONTROLLER_STICK_MAX 32770
 #define CONTROLLER_STICK_MIN -32770
+
+#define SECOND 1000.0f
+#define FPS 60
+#define MS_PER_FRAME (SECOND / FPS)
+#define UPDATES_PER_SECOND 65
+#define MS_PER_UPDATE (SECOND / UPDATES_PER_SECOND)
 
 
 struct SDLOffscreenBuffer
@@ -65,23 +73,41 @@ global_variable SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
 global_variable TransformData transform;
 
 
+uint64_t
+get_current_time_ms(void)
+{
+    struct timespec current;
+    // TODO(amin): Fallback to other time sources when CLOCK_MONOTONIC is unavailable.
+    clock_gettime(CLOCK_MONOTONIC, &current);
+    uint64_t milliseconds = ((current.tv_sec * 1000000000) + current.tv_nsec) / 1000000;
+    return milliseconds;
+}
+
+
 internal void
-render_mosaic(SDLOffscreenBuffer buffer, int x_offset, int y_offset, char color_choice)
+render_texture(
+        SDLOffscreenBuffer buffer,
+        uint32 texture[TEX_HEIGHT][TEX_WIDTH],
+        int x_offset,
+        int y_offset,
+        char color_choice)
 {
     uint8 *row = (uint8 *)buffer.memory;
 
     for (int y = 0; y < buffer.height; ++y)
     {
         uint32 *pixel = (uint32 *)row;
-
         for (int x = 0; x < buffer.width; ++x)
         {
-            uint8 x_factor = (x + x_offset);
-            uint8 y_factor = (y + y_offset);
-            uint8 color_value (x_factor * x_factor * y_factor * y_factor);
-            uint32 red = color_value << 16;
-            uint32 green = color_value << 8;
-            uint32 blue = color_value;
+            uint8 color = texture[
+                (unsigned int)(y + y_offset) % TEX_HEIGHT
+            ]
+            [
+                (unsigned int)(x + x_offset) % TEX_WIDTH
+            ];
+            uint32 red = color << 16;
+            uint32 green = color << 8;
+            uint32 blue = color;
 
             switch(color_choice)
             {
@@ -117,6 +143,78 @@ render_mosaic(SDLOffscreenBuffer buffer, int x_offset, int y_offset, char color_
         }
 
         row += buffer.pitch;
+    }
+}
+
+
+internal void
+render_tunnel(
+        SDLOffscreenBuffer buffer,
+        uint32 texture[TEX_HEIGHT][TEX_WIDTH],
+        int rotation_offset,
+        int translation_offset,
+        char color_choice)
+{
+    uint8 *row = (uint8 *)buffer.memory;
+
+    for (int y = 0; y < buffer.height; ++y)
+    {
+        uint32 *pixel = (uint32 *)row;
+        for (int x = 0; x < buffer.width; ++x)
+        {
+            uint8 color = texture[
+                (unsigned int)(
+                    transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x]
+                    + translation_offset
+                )
+                % TEX_HEIGHT
+            ]
+            [
+                (unsigned int)(
+                    transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x]
+                    + rotation_offset
+                )
+                % TEX_WIDTH
+            ];
+
+            uint32 red = color << 16;
+            uint32 green = color << 8;
+            uint32 blue = color;
+
+            // TODO(amin): Make a color choice enum
+            switch(color_choice)
+            {
+                case 'g':
+                {
+                    *pixel++ = green;
+                } break;
+                case 'r':
+                {
+                    *pixel++ = red;
+                } break;
+                case 'b':
+                {
+                    *pixel++ = blue;
+                } break;
+                case 'y':
+                {
+                    *pixel++ = red | green;
+                } break;
+                case 'm':
+                {
+                    *pixel++ = red | blue;
+                } break;
+                case 'c':
+                {
+                    *pixel++ = blue | green;
+                } break;
+                default:
+                {
+                    *pixel++ = red | green | blue;
+                } break;
+            }
+        }
+        row += global_back_buffer.pitch;
     }
 }
 
@@ -335,7 +433,7 @@ int main(void)
     sdl_open_game_controllers();
 
     SDL_Window *window = SDL_CreateWindow(
-            "Tunnel Flyer",
+            "Tunnel Runner",
             SDL_WINDOWPOS_UNDEFINED,
             SDL_WINDOWPOS_UNDEFINED,
             SCREEN_WIDTH,
@@ -351,27 +449,35 @@ int main(void)
             SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
-
             uint32 texture[TEX_HEIGHT][TEX_WIDTH];
 
-            // Make XOR texture
             for (int y = 0; y < TEX_HEIGHT; ++y)
             {
                 for (int x = 0; x < TEX_WIDTH; ++x)
                 {
+                    // XOR texture:
                     texture[y][x] = (x * 256 / TEX_WIDTH) ^ (y * 256 / TEX_HEIGHT);
-                    //texture[y][x]= (x * x * y * y);
+                    // Mosaic texture:
+                    //texture[y][x] = (x * x * y * y);
                 }
             }
-
 
             bool running = true;
             int rotation_offset = 0;
             int translation_offset = 0;
             char color_choice = '\0';
 
+            uint64_t lag = 0;
+            uint64_t previous_ms = get_current_time_ms();
+
             while (running)
             {
+                uint64_t current_ms = get_current_time_ms();
+                uint64_t elapsed_ms = current_ms - previous_ms;
+                previous_ms = current_ms;
+                lag += elapsed_ms;
+                //printf("Lag: %d\n", lag);
+
                 SDL_Event event;
 
                 while (SDL_PollEvent(&event))
@@ -498,58 +604,19 @@ int main(void)
                         //printf("dimension.height / 2: %d\t damp_y: %d\t raw_y: %d\n", dimension.height / 2, dampened_y, stick_righty);
                     }
                 }
+                printf("%d, %d\n", translation_offset, rotation_offset);
 
-                // Transform texture and draw to buffer
-                uint8 *row = (uint8 *)global_back_buffer.memory;
-                for (int y = 0; y < global_back_buffer.height; ++y)
+                while (lag >= MS_PER_UPDATE)
                 {
-                    uint32 *pixel = (uint32 *)row;
-                    for (int x = 0; x < global_back_buffer.width; ++x)
-                    {
-                        int color = texture[(unsigned int)(transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x] + translation_offset) % TEX_WIDTH]
-                                           [(unsigned int)(transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x] + rotation_offset) % TEX_HEIGHT];
-
-                        uint32 red = color << 16;
-                        uint32 green = color << 8;
-                        uint32 blue = color;
-
-                        // TODO(amin): Make a color choice enum
-                        switch(color_choice)
-                        {
-                            case 'g':
-                            {
-                                *pixel++ = green;
-                            } break;
-                            case 'r':
-                            {
-                                *pixel++ = red;
-                            } break;
-                            case 'b':
-                            {
-                                *pixel++ = blue;
-                            } break;
-                            case 'y':
-                            {
-                                *pixel++ = red | green;
-                            } break;
-                            case 'm':
-                            {
-                                *pixel++ = red | blue;
-                            } break;
-                            case 'c':
-                            {
-                                *pixel++ = blue | green;
-                            } break;
-                            default:
-                            {
-                                *pixel++ = red | green | blue;
-                            } break;
-                        }
-                    }
-                    row += global_back_buffer.pitch;
+                    render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
+                    //render_texture(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
+                    lag -= MS_PER_UPDATE;
                 }
-                //render_mosaic(global_back_buffer, rotation_offset, translation_offset, color_choice);
                 sdl_update_window(window, renderer, global_back_buffer);
+                if (elapsed_ms <= MS_PER_FRAME)
+                {
+                    usleep((MS_PER_FRAME - elapsed_ms) * SECOND);
+                }
             }
         }
         else
