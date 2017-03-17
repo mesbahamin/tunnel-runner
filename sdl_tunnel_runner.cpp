@@ -1,4 +1,5 @@
 #include <cmath>
+#include <inttypes.h>
 #include <SDL.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -37,7 +38,7 @@ typedef uint64_t uint64;
 #define SECOND 1000.0f
 #define FPS 60
 #define MS_PER_FRAME (SECOND / FPS)
-#define UPDATES_PER_SECOND 65
+#define UPDATES_PER_SECOND 120
 #define MS_PER_UPDATE (SECOND / UPDATES_PER_SECOND)
 
 
@@ -478,140 +479,140 @@ int main(void)
                 lag += elapsed_ms;
                 //printf("Lag: %d\n", lag);
 
-                SDL_Event event;
-
-                while (SDL_PollEvent(&event))
-                {
-                    if (handle_event(&event))
-                    {
-                        running = false;
-                    }
-                }
-
-                SDL_PumpEvents();
-
-                dimension = sdl_get_window_dimension(window);
-
-                const uint8 *keystate = SDL_GetKeyboardState(0);
-
-                if (keystate[SDL_SCANCODE_A])
-                {
-                    rotation_offset -= MOVEMENT_SPEED;
-                }
-                if (keystate[SDL_SCANCODE_D])
-                {
-                    rotation_offset += MOVEMENT_SPEED;
-                }
-                if (keystate[SDL_SCANCODE_W])
-                {
-                    translation_offset += MOVEMENT_SPEED;
-                }
-                if (keystate[SDL_SCANCODE_S])
-                {
-                    translation_offset -= MOVEMENT_SPEED;
-                }
-                if (keystate[SDL_SCANCODE_LEFT])
-                {
-                    rotation_offset --;
-                }
-                if (keystate[SDL_SCANCODE_RIGHT])
-                {
-                    rotation_offset ++;
-                }
-                if (keystate[SDL_SCANCODE_UP])
-                {
-                    translation_offset ++;
-                }
-                if (keystate[SDL_SCANCODE_DOWN])
-                {
-                    translation_offset --;
-                }
-
-
-                for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
-                {
-                    if (SDL_GameControllerGetAttached(controller_handles[controller_index]))
-                    {
-                        bool start = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_START);
-                        bool back = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_BACK);
-                        bool a_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_A);
-                        bool b_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_B);
-                        bool x_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_X);
-                        bool y_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_Y);
-                        bool left_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-                        bool right_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-
-                        int16 stick_leftx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTX);
-                        int16 stick_lefty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTY);
-                        int16 stick_rightx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTX);
-                        int16 stick_righty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTY);
-
-                        if (start)
-                        {
-                            SDL_HapticRumblePlay(rumble_handles[controller_index], 0.5f, 2000);
-                            color_choice = '\0';
-                        }
-                        else
-                        {
-                            SDL_HapticRumbleStop(rumble_handles[controller_index]);
-                        }
-
-                        if (back)
-                        {
-                            running = false;
-                        }
-
-                        // NOTE(amin): Buttons select colors.
-                        if (a_button)
-                        {
-                            color_choice = 'g';
-                        }
-                        if (b_button)
-                        {
-                            color_choice = 'r';
-                        }
-                        if (x_button)
-                        {
-                            color_choice = 'b';
-                        }
-                        if (y_button)
-                        {
-                            color_choice = 'y';
-                        }
-                        if (left_shoulder)
-                        {
-                            color_choice = 'm';
-                        }
-                        if (right_shoulder)
-                        {
-                            color_choice = 'c';
-                        }
-
-                        rotation_offset += stick_leftx / 5000;
-                        translation_offset -= stick_lefty / 5000;
-
-                        int dampened_x_max = dimension.width / 2;
-                        int dampened_x_min = -(dimension.width / 2);
-                        int dampened_y_max = dimension.height / 2;
-                        int dampened_y_min = -(dimension.height / 2);
-
-                        int dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
-                        int dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
-
-                        transform.look_shift_x = dimension.width / 2 + dampened_x;
-                        transform.look_shift_y = dimension.height / 2 + dampened_y;
-                        //printf("dimension.width / 2: %d\t damp_x: %d\t raw_x: %d\n", dimension.width / 2, dampened_x, stick_rightx);
-                        //printf("dimension.height / 2: %d\t damp_y: %d\t raw_y: %d\n", dimension.height / 2, dampened_y, stick_righty);
-                    }
-                }
-                printf("%d, %d\n", translation_offset, rotation_offset);
-
+                printf("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
                 while (lag >= MS_PER_UPDATE)
                 {
-                    render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
-                    //render_texture(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
+                    SDL_Event event;
+
+                    while (SDL_PollEvent(&event))
+                    {
+                        running = !handle_event(&event);
+                    }
+
+                    SDL_PumpEvents();
+
+                    dimension = sdl_get_window_dimension(window);
+
+                    const uint8 *keystate = SDL_GetKeyboardState(0);
+
+                    if (keystate[SDL_SCANCODE_A])
+                    {
+                        rotation_offset -= MOVEMENT_SPEED;
+                    }
+                    if (keystate[SDL_SCANCODE_D])
+                    {
+                        rotation_offset += MOVEMENT_SPEED;
+                    }
+                    if (keystate[SDL_SCANCODE_W])
+                    {
+                        translation_offset += MOVEMENT_SPEED;
+                    }
+                    if (keystate[SDL_SCANCODE_S])
+                    {
+                        translation_offset -= MOVEMENT_SPEED;
+                    }
+                    if (keystate[SDL_SCANCODE_LEFT])
+                    {
+                        rotation_offset --;
+                    }
+                    if (keystate[SDL_SCANCODE_RIGHT])
+                    {
+                        rotation_offset ++;
+                    }
+                    if (keystate[SDL_SCANCODE_UP])
+                    {
+                        translation_offset ++;
+                    }
+                    if (keystate[SDL_SCANCODE_DOWN])
+                    {
+                        translation_offset --;
+                    }
+
+
+                    for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+                    {
+                        if (SDL_GameControllerGetAttached(controller_handles[controller_index]))
+                        {
+                            bool start = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_START);
+                            bool back = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_BACK);
+                            bool a_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_A);
+                            bool b_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_B);
+                            bool x_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_X);
+                            bool y_button = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_Y);
+                            bool left_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+                            bool right_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+
+                            int16 stick_leftx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTX);
+                            int16 stick_lefty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTY);
+                            int16 stick_rightx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTX);
+                            int16 stick_righty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTY);
+
+                            if (start)
+                            {
+                                SDL_HapticRumblePlay(rumble_handles[controller_index], 0.5f, 2000);
+                                color_choice = '\0';
+                            }
+                            else
+                            {
+                                SDL_HapticRumbleStop(rumble_handles[controller_index]);
+                            }
+
+                            if (back)
+                            {
+                                running = false;
+                            }
+
+                            // NOTE(amin): Buttons select colors.
+                            if (a_button)
+                            {
+                                color_choice = 'g';
+                            }
+                            if (b_button)
+                            {
+                                color_choice = 'r';
+                            }
+                            if (x_button)
+                            {
+                                color_choice = 'b';
+                            }
+                            if (y_button)
+                            {
+                                color_choice = 'y';
+                            }
+                            if (left_shoulder)
+                            {
+                                color_choice = 'm';
+                            }
+                            if (right_shoulder)
+                            {
+                                color_choice = 'c';
+                            }
+
+                            rotation_offset += stick_leftx / 5000;
+                            translation_offset -= stick_lefty / 5000;
+
+                            int dampened_x_max = dimension.width / 2;
+                            int dampened_x_min = -(dimension.width / 2);
+                            int dampened_y_max = dimension.height / 2;
+                            int dampened_y_min = -(dimension.height / 2);
+
+                            int dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
+                            int dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
+
+                            transform.look_shift_x = dimension.width / 2 + dampened_x;
+                            transform.look_shift_y = dimension.height / 2 + dampened_y;
+                            //printf("dimension.width / 2: %d\t damp_x: %d\t raw_x: %d\n", dimension.width / 2, dampened_x, stick_rightx);
+                            //printf("dimension.height / 2: %d\t damp_y: %d\t raw_y: %d\n", dimension.height / 2, dampened_y, stick_righty);
+                        }
+                    }
+                    //printf("%d, %d\n", translation_offset, rotation_offset);
+
+                    printf("\t%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                    //render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                     lag -= MS_PER_UPDATE;
                 }
+                render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
+                //render_texture(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                 sdl_update_window(window, renderer, global_back_buffer);
                 if (elapsed_ms <= MS_PER_FRAME)
                 {
