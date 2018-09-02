@@ -21,7 +21,19 @@
 #define UPDATES_PER_SECOND 120
 #define MS_PER_UPDATE (SECOND / UPDATES_PER_SECOND)
 
-#define LOG_ERR(message, ...) fprintf(stderr, (message), ##__VA_ARGS__)
+#define TR_LOG_ERR(message, ...) fprintf(stderr, (message), ##__VA_ARGS__)
+
+#ifdef TR_LOGLEVEL_DEBUG
+#define TR_LOG_DBG(message, ...) printf((message), ##__VA_ARGS__)
+#else
+#define TR_LOG_DBG(message, ...)
+#endif
+
+#ifdef TR_LOGLEVEL_DEBUG_FRAME
+#define TR_LOG_FRM(message, ...) TR_LOG_DBG((message), ##__VA_ARGS__)
+#else
+#define TR_LOG_FRM(message, ...)
+#endif
 
 enum COLOR
 {
@@ -133,8 +145,8 @@ render_texture(
                 } break;
                 default:
                 {
+                    TR_LOG_ERR("Invalid color enum value: %d\n", color_choice);
                     *pixel++ = red | green | blue;
-                    LOG_ERR("Invalid color enum value: %d\n", color_choice);
                 } break;
             }
         }
@@ -211,7 +223,7 @@ render_tunnel(
                 default:
                 {
                     *pixel++ = red | green | blue;
-                    LOG_ERR("Invalid color enum value: %d\n", color_choice);
+                    TR_LOG_ERR("Invalid color enum value: %d\n", color_choice);
                 } break;
             }
         }
@@ -306,7 +318,7 @@ sdl_update_window(SDL_Renderer *renderer, struct SDLOffscreenBuffer buffer)
 {
     if (SDL_UpdateTexture(buffer.texture, 0, buffer.memory, buffer.pitch))
     {
-        LOG_ERR("SDL_UpdateTexture failed: %s\n", SDL_GetError());
+        TR_LOG_ERR("SDL_UpdateTexture failed: %s\n", SDL_GetError());
     }
 
     SDL_RenderCopy(renderer, buffer.texture, 0, 0);
@@ -323,7 +335,7 @@ handle_event(SDL_Event *event)
     {
         case SDL_QUIT:
         {
-            printf("SDL_QUIT\n");
+            TR_LOG_DBG("SDL_QUIT\n");
             should_quit = true;
         } break;
 
@@ -335,13 +347,13 @@ handle_event(SDL_Event *event)
                 {
                     SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
                     SDL_Renderer *renderer = SDL_GetRenderer(window);
-                    printf("SDL_WINDOWEVENT_SIZE_CHANGED (%d, %d)\n", event->window.data1, event->window.data2);
+                    TR_LOG_DBG("SDL_WINDOWEVENT_SIZE_CHANGED (%d, %d)\n", event->window.data1, event->window.data2);
                     sdl_resize_texture(&global_back_buffer, renderer, event->window.data1, event->window.data2);
                 } break;
 
                 case SDL_WINDOWEVENT_FOCUS_GAINED:
                 {
-                    printf("SDL_WINDOWEVENT_FOCUS_GAINED\n");
+                    TR_LOG_DBG("SDL_WINDOWEVENT_FOCUS_GAINED\n");
                 } break;
 
                 case SDL_WINDOWEVENT_EXPOSED:
@@ -398,14 +410,29 @@ sdl_close_game_controllers()
 }
 
 
-int main(void)
+void
+sdl_cleanup(void)
+{
+    TR_LOG_DBG("Cleaning up...\n");
+    sdl_close_game_controllers();
+    SDL_Quit();
+}
+
+
+int
+main(void)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC) != 0)
     {
-        LOG_ERR("SDL_Init failed: %s\n", SDL_GetError());
+        TR_LOG_ERR("SDL_Init failed: %s\n", SDL_GetError());
+        exit(EXIT_FAILURE);
     }
 
     sdl_open_game_controllers();
+
+    // We register this function only _after_ we init SDL and open the game
+    // controllers!
+    atexit(sdl_cleanup);
 
     SDL_Window *window = SDL_CreateWindow(
             "Tunnel Runner",
@@ -451,9 +478,9 @@ int main(void)
                 uint64_t elapsed_ms = current_ms - previous_ms;
                 previous_ms = current_ms;
                 lag += elapsed_ms;
-                //printf("Lag: %d\n", lag);
+                TR_LOG_FRM("Lag: %d\n", lag);
 
-                //printf("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                TR_LOG_FRM("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
                 while (lag >= MS_PER_UPDATE)
                 {
                     SDL_Event event;
@@ -575,13 +602,13 @@ int main(void)
 
                             transform.look_shift_x = dimension.width / 2 + dampened_x;
                             transform.look_shift_y = dimension.height / 2 + dampened_y;
-                            //printf("dimension.width / 2: %d\t damp_x: %d\t raw_x: %d\n", dimension.width / 2, dampened_x, stick_rightx);
-                            //printf("dimension.height / 2: %d\t damp_y: %d\t raw_y: %d\n", dimension.height / 2, dampened_y, stick_righty);
+                            TR_LOG_FRM("dimension.width / 2: %d\t damp_x: %d\t raw_x: %d\n", dimension.width / 2, dampened_x, stick_rightx);
+                            TR_LOG_FRM("dimension.height / 2: %d\t damp_y: %d\t raw_y: %d\n", dimension.height / 2, dampened_y, stick_righty);
                         }
                     }
-                    //printf("%d, %d\n", translation_offset, rotation_offset);
+                    TR_LOG_FRM("%d, %d\n", translation_offset, rotation_offset);
 
-                    //printf("\t%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                    TR_LOG_FRM("\t%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
                     //render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                     lag -= MS_PER_UPDATE;
                 }
@@ -596,15 +623,15 @@ int main(void)
         }
         else
         {
-            LOG_ERR("SDL_CreateRenderer failed: %s\n", SDL_GetError());
+            TR_LOG_ERR("SDL_CreateRenderer failed: %s\n", SDL_GetError());
+            exit(EXIT_FAILURE);
         }
     }
     else
     {
-        LOG_ERR("SDL_CreateWindow failed: %s\n", SDL_GetError());
+        TR_LOG_ERR("SDL_CreateWindow failed: %s\n", SDL_GetError());
+        exit(EXIT_FAILURE);
     }
 
-    sdl_close_game_controllers();
-    SDL_Quit();
-    return 0 ;
+    return 0;
 }
