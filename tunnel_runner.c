@@ -21,6 +21,19 @@
 #define UPDATES_PER_SECOND 120
 #define MS_PER_UPDATE (SECOND / UPDATES_PER_SECOND)
 
+#define LOG_ERR(message, ...) fprintf(stderr, (message), ##__VA_ARGS__)
+
+enum COLOR
+{
+    COLOR_GREEN,
+    COLOR_RED,
+    COLOR_BLUE,
+    COLOR_YELLOW,
+    COLOR_MAGENTA,
+    COLOR_CYAN,
+    COLOR_WHITE
+};
+
 struct SDLOffscreenBuffer
 {
     // pixels are always 32-bits wide. Memory order: BB GG RR XX.
@@ -57,7 +70,6 @@ uint64_t
 get_current_time_ms(void)
 {
     struct timespec current;
-    // TODO: Fallback to other time sources when CLOCK_MONOTONIC is unavailable.
     clock_gettime(CLOCK_MONOTONIC, &current);
     uint64_t milliseconds = ((current.tv_sec * 1000000000) + current.tv_nsec) / 1000000;
     return milliseconds;
@@ -70,7 +82,7 @@ render_texture(
         uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
         int x_offset,
         int y_offset,
-        char color_choice)
+        enum COLOR color_choice)
 {
     uint8_t *row = (uint8_t *)buffer.memory;
 
@@ -91,33 +103,38 @@ render_texture(
 
             switch(color_choice)
             {
-                case 'g':
+                case COLOR_GREEN:
                 {
                     *pixel++ = green;
                 } break;
-                case 'r':
+                case COLOR_RED:
                 {
                     *pixel++ = red;
                 } break;
-                case 'b':
+                case COLOR_BLUE:
                 {
                     *pixel++ = blue;
                 } break;
-                case 'y':
+                case COLOR_YELLOW:
                 {
                     *pixel++ = red | green;
                 } break;
-                case 'm':
+                case COLOR_MAGENTA:
                 {
                     *pixel++ = red | blue;
                 } break;
-                case 'c':
+                case COLOR_CYAN:
                 {
                     *pixel++ = blue | green;
+                } break;
+                case COLOR_WHITE:
+                {
+                    *pixel++ = red | green | blue;
                 } break;
                 default:
                 {
                     *pixel++ = red | green | blue;
+                    LOG_ERR("Invalid color enum value: %d\n", color_choice);
                 } break;
             }
         }
@@ -161,36 +178,40 @@ render_tunnel(
             uint32_t green = color << 8;
             uint32_t blue = color;
 
-            // TODO: Make a color choice enum
             switch(color_choice)
             {
-                case 'g':
+                case COLOR_GREEN:
                 {
                     *pixel++ = green;
                 } break;
-                case 'r':
+                case COLOR_RED:
                 {
                     *pixel++ = red;
                 } break;
-                case 'b':
+                case COLOR_BLUE:
                 {
                     *pixel++ = blue;
                 } break;
-                case 'y':
+                case COLOR_YELLOW:
                 {
                     *pixel++ = red | green;
                 } break;
-                case 'm':
+                case COLOR_MAGENTA:
                 {
                     *pixel++ = red | blue;
                 } break;
-                case 'c':
+                case COLOR_CYAN:
                 {
                     *pixel++ = blue | green;
+                } break;
+                case COLOR_WHITE:
+                {
+                    *pixel++ = red | green | blue;
                 } break;
                 default:
                 {
                     *pixel++ = red | green | blue;
+                    LOG_ERR("Invalid color enum value: %d\n", color_choice);
                 } break;
             }
         }
@@ -204,7 +225,7 @@ sdl_get_window_dimension(SDL_Window *window)
 {
     struct SDLWindowDimension result;
     SDL_GetWindowSize(window, &result.width, &result.height);
-    return(result);
+    return result ;
 }
 
 
@@ -285,7 +306,7 @@ sdl_update_window(SDL_Renderer *renderer, struct SDLOffscreenBuffer buffer)
 {
     if (SDL_UpdateTexture(buffer.texture, 0, buffer.memory, buffer.pitch))
     {
-        // TODO: Handle this error
+        LOG_ERR("SDL_UpdateTexture failed: %s\n", SDL_GetError());
     }
 
     SDL_RenderCopy(renderer, buffer.texture, 0, 0);
@@ -332,7 +353,7 @@ handle_event(SDL_Event *event)
             }
         } break;
     }
-    return(should_quit);
+    return should_quit ;
 }
 
 
@@ -381,7 +402,7 @@ int main(void)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC) != 0)
     {
-        // TODO: log SDL_Init error
+        LOG_ERR("SDL_Init failed: %s\n", SDL_GetError());
     }
 
     sdl_open_game_controllers();
@@ -419,7 +440,7 @@ int main(void)
             bool running = true;
             int rotation_offset = 0;
             int translation_offset = 0;
-            char color_choice = '\0';
+            enum COLOR color_choice = COLOR_WHITE;
 
             uint64_t lag = 0;
             uint64_t previous_ms = get_current_time_ms();
@@ -518,27 +539,27 @@ int main(void)
                             // NOTE: Buttons select colors.
                             if (a_button)
                             {
-                                color_choice = 'g';
+                                color_choice = COLOR_GREEN;
                             }
                             if (b_button)
                             {
-                                color_choice = 'r';
+                                color_choice = COLOR_RED;
                             }
                             if (x_button)
                             {
-                                color_choice = 'b';
+                                color_choice = COLOR_BLUE;
                             }
                             if (y_button)
                             {
-                                color_choice = 'y';
+                                color_choice = COLOR_YELLOW;
                             }
                             if (left_shoulder)
                             {
-                                color_choice = 'm';
+                                color_choice = COLOR_MAGENTA;
                             }
                             if (right_shoulder)
                             {
-                                color_choice = 'c';
+                                color_choice = COLOR_CYAN;
                             }
 
                             rotation_offset += stick_leftx / 5000;
@@ -575,15 +596,15 @@ int main(void)
         }
         else
         {
-            // TODO: log SDL_Renderer error
+            LOG_ERR("SDL_CreateRenderer failed: %s\n", SDL_GetError());
         }
     }
     else
     {
-        // TODO: log SDL_Window error
+        LOG_ERR("SDL_CreateWindow failed: %s\n", SDL_GetError());
     }
 
     sdl_close_game_controllers();
     SDL_Quit();
-    return(0);
+    return 0 ;
 }
