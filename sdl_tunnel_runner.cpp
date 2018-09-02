@@ -1,4 +1,3 @@
-#include <cmath>
 #include <inttypes.h>
 #include <SDL.h>
 #include <stdio.h>
@@ -10,20 +9,6 @@
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
-
-#define internal static
-#define local_persist static
-#define global_variable static
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -41,10 +26,9 @@ typedef uint64_t uint64;
 #define UPDATES_PER_SECOND 120
 #define MS_PER_UPDATE (SECOND / UPDATES_PER_SECOND)
 
-
 struct SDLOffscreenBuffer
 {
-    // NOTE(amin): pixels are always 32-bits wide. Memory order: BB GG RR XX.
+    // pixels are always 32-bits wide. Memory order: BB GG RR XX.
     SDL_Texture *texture;
     void *memory;
     int width;
@@ -68,47 +52,47 @@ struct TransformData
     int look_shift_y;
 };
 
-global_variable SDLOffscreenBuffer global_back_buffer;
-global_variable SDL_GameController *controller_handles[MAX_CONTROLLERS];
-global_variable SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
-global_variable TransformData transform;
+static SDLOffscreenBuffer global_back_buffer;
+static SDL_GameController *controller_handles[MAX_CONTROLLERS];
+static SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
+static TransformData transform;
 
 
 uint64_t
 get_current_time_ms(void)
 {
     struct timespec current;
-    // TODO(amin): Fallback to other time sources when CLOCK_MONOTONIC is unavailable.
+    // TODO: Fallback to other time sources when CLOCK_MONOTONIC is unavailable.
     clock_gettime(CLOCK_MONOTONIC, &current);
     uint64_t milliseconds = ((current.tv_sec * 1000000000) + current.tv_nsec) / 1000000;
     return milliseconds;
 }
 
 
-internal void
+void
 render_texture(
         SDLOffscreenBuffer buffer,
-        uint32 texture[TEX_HEIGHT][TEX_WIDTH],
+        uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
         int x_offset,
         int y_offset,
         char color_choice)
 {
-    uint8 *row = (uint8 *)buffer.memory;
+    uint8_t *row = (uint8_t *)buffer.memory;
 
     for (int y = 0; y < buffer.height; ++y)
     {
-        uint32 *pixel = (uint32 *)row;
+        uint32_t *pixel = (uint32_t *)row;
         for (int x = 0; x < buffer.width; ++x)
         {
-            uint8 color = texture[
+            uint8_t color = texture[
                 (unsigned int)(y + y_offset) % TEX_HEIGHT
             ]
             [
                 (unsigned int)(x + x_offset) % TEX_WIDTH
             ];
-            uint32 red = color << 16;
-            uint32 green = color << 8;
-            uint32 blue = color;
+            uint32_t red = color << 16;
+            uint32_t green = color << 8;
+            uint32_t blue = color;
 
             switch(color_choice)
             {
@@ -148,22 +132,22 @@ render_texture(
 }
 
 
-internal void
+void
 render_tunnel(
         SDLOffscreenBuffer buffer,
-        uint32 texture[TEX_HEIGHT][TEX_WIDTH],
+        uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
         int rotation_offset,
         int translation_offset,
         char color_choice)
 {
-    uint8 *row = (uint8 *)buffer.memory;
+    uint8_t *row = (uint8_t *)buffer.memory;
 
     for (int y = 0; y < buffer.height; ++y)
     {
-        uint32 *pixel = (uint32 *)row;
+        uint32_t *pixel = (uint32_t *)row;
         for (int x = 0; x < buffer.width; ++x)
         {
-            uint8 color = texture[
+            uint8_t color = texture[
                 (unsigned int)(
                     transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x]
                     + translation_offset
@@ -178,11 +162,11 @@ render_tunnel(
                 % TEX_WIDTH
             ];
 
-            uint32 red = color << 16;
-            uint32 green = color << 8;
-            uint32 blue = color;
+            uint32_t red = color << 16;
+            uint32_t green = color << 8;
+            uint32_t blue = color;
 
-            // TODO(amin): Make a color choice enum
+            // TODO: Make a color choice enum
             switch(color_choice)
             {
                 case 'g':
@@ -229,7 +213,7 @@ sdl_get_window_dimension(SDL_Window *window)
 }
 
 
-internal void
+void
 sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width, int height)
 {
     if (buffer->memory)
@@ -327,12 +311,12 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
 }
 
 
-internal void
-sdl_update_window(SDL_Window *window, SDL_Renderer *renderer, SDLOffscreenBuffer buffer)
+void
+sdl_update_window(SDL_Renderer *renderer, SDLOffscreenBuffer buffer)
 {
     if (SDL_UpdateTexture(buffer.texture, 0, buffer.memory, buffer.pitch))
     {
-        // TODO(amin): Handle this error
+        // TODO: Handle this error
     }
 
     SDL_RenderCopy(renderer, buffer.texture, 0, 0);
@@ -374,7 +358,7 @@ handle_event(SDL_Event *event)
                 {
                     SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
                     SDL_Renderer *renderer = SDL_GetRenderer(window);
-                    sdl_update_window(window, renderer, global_back_buffer);
+                    sdl_update_window(renderer, global_back_buffer);
                 } break;
             }
         } break;
@@ -383,7 +367,7 @@ handle_event(SDL_Event *event)
 }
 
 
-internal void
+void
 sdl_open_game_controllers()
 {
     int num_joysticks = SDL_NumJoysticks();
@@ -411,7 +395,7 @@ sdl_open_game_controllers()
 }
 
 
-internal void
+void
 sdl_close_game_controllers()
 {
     for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
@@ -428,7 +412,7 @@ int main(void)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC) != 0)
     {
-        // TODO(amin): log SDL_Init error
+        // TODO: log SDL_Init error
     }
 
     sdl_open_game_controllers();
@@ -450,7 +434,7 @@ int main(void)
             SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
-            uint32 texture[TEX_HEIGHT][TEX_WIDTH];
+            uint32_t texture[TEX_HEIGHT][TEX_WIDTH];
 
             for (int y = 0; y < TEX_HEIGHT; ++y)
             {
@@ -479,7 +463,7 @@ int main(void)
                 lag += elapsed_ms;
                 //printf("Lag: %d\n", lag);
 
-                printf("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                //printf("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
                 while (lag >= MS_PER_UPDATE)
                 {
                     SDL_Event event;
@@ -493,7 +477,7 @@ int main(void)
 
                     dimension = sdl_get_window_dimension(window);
 
-                    const uint8 *keystate = SDL_GetKeyboardState(0);
+                    const uint8_t *keystate = SDL_GetKeyboardState(0);
 
                     if (keystate[SDL_SCANCODE_A])
                     {
@@ -542,10 +526,10 @@ int main(void)
                             bool left_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
                             bool right_shoulder = SDL_GameControllerGetButton(controller_handles[controller_index], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
 
-                            int16 stick_leftx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTX);
-                            int16 stick_lefty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTY);
-                            int16 stick_rightx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTX);
-                            int16 stick_righty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTY);
+                            int16_t stick_leftx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTX);
+                            int16_t stick_lefty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_LEFTY);
+                            int16_t stick_rightx = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTX);
+                            int16_t stick_righty = SDL_GameControllerGetAxis(controller_handles[controller_index], SDL_CONTROLLER_AXIS_RIGHTY);
 
                             if (start)
                             {
@@ -562,7 +546,7 @@ int main(void)
                                 running = false;
                             }
 
-                            // NOTE(amin): Buttons select colors.
+                            // NOTE: Buttons select colors.
                             if (a_button)
                             {
                                 color_choice = 'g';
@@ -607,13 +591,13 @@ int main(void)
                     }
                     //printf("%d, %d\n", translation_offset, rotation_offset);
 
-                    printf("\t%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                    //printf("\t%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
                     //render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                     lag -= MS_PER_UPDATE;
                 }
                 render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                 //render_texture(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
-                sdl_update_window(window, renderer, global_back_buffer);
+                sdl_update_window(renderer, global_back_buffer);
                 if (elapsed_ms <= MS_PER_FRAME)
                 {
                     usleep((MS_PER_FRAME - elapsed_ms) * SECOND);
@@ -622,12 +606,12 @@ int main(void)
         }
         else
         {
-            // TODO(amin): log SDL_Renderer error
+            // TODO: log SDL_Renderer error
         }
     }
     else
     {
-        // TODO(amin): log SDL_Window error
+        // TODO: log SDL_Window error
     }
 
     sdl_close_game_controllers();
