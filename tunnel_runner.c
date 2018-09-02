@@ -1,14 +1,9 @@
 #include <inttypes.h>
 #include <SDL.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <sys/mman.h>
 #include <time.h>
-#include <unistd.h>
-
-#ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS MAP_ANON
-#endif
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -52,10 +47,10 @@ struct TransformData
     int look_shift_y;
 };
 
-static SDLOffscreenBuffer global_back_buffer;
+static struct SDLOffscreenBuffer global_back_buffer;
 static SDL_GameController *controller_handles[MAX_CONTROLLERS];
 static SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
-static TransformData transform;
+static struct TransformData transform;
 
 
 uint64_t
@@ -71,7 +66,7 @@ get_current_time_ms(void)
 
 void
 render_texture(
-        SDLOffscreenBuffer buffer,
+        struct SDLOffscreenBuffer buffer,
         uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
         int x_offset,
         int y_offset,
@@ -134,7 +129,7 @@ render_texture(
 
 void
 render_tunnel(
-        SDLOffscreenBuffer buffer,
+        struct SDLOffscreenBuffer buffer,
         uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
         int rotation_offset,
         int translation_offset,
@@ -204,21 +199,21 @@ render_tunnel(
 }
 
 
-SDLWindowDimension
+struct SDLWindowDimension
 sdl_get_window_dimension(SDL_Window *window)
 {
-    SDLWindowDimension result;
+    struct SDLWindowDimension result;
     SDL_GetWindowSize(window, &result.width, &result.height);
     return(result);
 }
 
 
 void
-sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width, int height)
+sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width, int height)
 {
     if (buffer->memory)
     {
-        munmap(buffer->memory, buffer->width * buffer->height * BYTES_PER_PIXEL);
+        free(buffer->memory);
     }
 
     if (buffer->texture)
@@ -230,17 +225,17 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
     {
         for (int y = 0; y < transform.height; ++y)
         {
-            munmap(transform.distance_table[y], transform.width * sizeof(int));
+            free(transform.distance_table[y]);
         }
-        munmap(transform.distance_table, transform.height * sizeof(int *));
+        free(transform.distance_table);
     }
     if (transform.angle_table)
     {
         for (int y = 0; y < transform.height; ++y)
         {
-            munmap(transform.angle_table[y], transform.width * sizeof(int));
+            free(transform.angle_table[y]);
         }
-        munmap(transform.angle_table, transform.height * sizeof(int *));
+        free(transform.angle_table);
     }
 
     buffer->texture = SDL_CreateTexture(
@@ -253,45 +248,19 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
     buffer->height = height;
     buffer->pitch = width * BYTES_PER_PIXEL;
 
-    buffer->memory = mmap(
-            0,
-            width * height * BYTES_PER_PIXEL,
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS,
-            -1, 0);
+    buffer->memory = malloc(width * height * BYTES_PER_PIXEL);
 
     transform.width = 2 * width;
     transform.height = 2 * height;
     transform.look_shift_x = width / 2;
     transform.look_shift_y = height / 2;
-    transform.distance_table = (int **)mmap(
-            0,
-            transform.height * sizeof(int *),
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS,
-            -1, 0);
-
-    transform.angle_table = (int **)mmap(
-            0,
-            transform.height * sizeof(int *),
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS,
-            -1, 0);
+    transform.distance_table = malloc(transform.height * sizeof(int *));
+    transform.angle_table = malloc(transform.height * sizeof(int *));
 
     for (int y = 0; y < transform.height; ++y)
     {
-        transform.distance_table[y] = (int *)mmap(
-                0,
-                transform.width * sizeof(int),
-                PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS,
-                -1, 0);
-        transform.angle_table[y] = (int *)mmap(
-                0,
-                transform.width * sizeof(int),
-                PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS,
-                -1, 0);
+        transform.distance_table[y] = malloc(transform.width * sizeof(int));
+        transform.angle_table[y] = malloc(transform.width * sizeof(int));
     }
 
     // Make distance and angle transformation tables
@@ -300,10 +269,10 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
         for (int x = 0; x < transform.width; ++x)
         {
             float ratio = 32.0;
-            int distance = int(ratio * TEX_HEIGHT / sqrt(
-                    float((x - width) * (x - width) + (y - height) * (y - height))
+            int distance = (int)(ratio * TEX_HEIGHT / sqrt(
+                    (float)((x - width) * (x - width) + (y - height) * (y - height))
                 )) % TEX_HEIGHT;
-            int angle = (unsigned int)(0.5 * TEX_WIDTH * atan2(float(y - height), float(x - width)) / 3.1416);
+            int angle = (unsigned int)(0.5 * TEX_WIDTH * atan2((float)(y - height), (float)(x - width)) / 3.1416);
             transform.distance_table[y][x] = distance;
             transform.angle_table[y][x] = angle;
         }
@@ -312,7 +281,7 @@ sdl_resize_texture(SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width
 
 
 void
-sdl_update_window(SDL_Renderer *renderer, SDLOffscreenBuffer buffer)
+sdl_update_window(SDL_Renderer *renderer, struct SDLOffscreenBuffer buffer)
 {
     if (SDL_UpdateTexture(buffer.texture, 0, buffer.memory, buffer.pitch))
     {
@@ -431,7 +400,7 @@ int main(void)
 
         if (renderer)
         {
-            SDLWindowDimension dimension = sdl_get_window_dimension(window);
+            struct SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
             uint32_t texture[TEX_HEIGHT][TEX_WIDTH];
@@ -600,7 +569,7 @@ int main(void)
                 sdl_update_window(renderer, global_back_buffer);
                 if (elapsed_ms <= MS_PER_FRAME)
                 {
-                    usleep((MS_PER_FRAME - elapsed_ms) * SECOND);
+                    SDL_Delay((MS_PER_FRAME - elapsed_ms));
                 }
             }
         }
