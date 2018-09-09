@@ -1,5 +1,21 @@
-build:
-	clang -std=c99 -Wall -Wextra -DTR_LOGLEVEL_DEBUG -g tunnel_runner.c -o tunnel-runner -lm `sdl2-config --cflags --libs`
+# This makefile provides some convenient shortcuts for common operations. The
+# actual build logic happens in build.sh.
 
-run: build
-	./tunnel-runner
+BUILD_SCRIPT=./build.sh
+
+.PHONY: all clean debug release run
+
+all:
+	$(BUILD_SCRIPT)
+
+clean:
+	rm build/ -r
+
+debug:
+	$(BUILD_SCRIPT) --debug-only
+
+release:
+	$(BUILD_SCRIPT) --release-only
+
+run: release
+	./build/release/tunnel-runner
