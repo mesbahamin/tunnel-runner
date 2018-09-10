@@ -53,8 +53,8 @@ struct SDLOffscreenBuffer
     // pixels are always 32-bits wide. Memory order: BB GG RR XX.
     SDL_Texture *texture;
     void *memory;
-    int32_t width;
-    int32_t height;
+    uint32_t width;
+    uint32_t height;
     int32_t pitch;
 };
 
@@ -100,10 +100,10 @@ render_texture(
 {
     uint8_t *row = (uint8_t *)buffer.memory;
 
-    for (int32_t y = 0; y < buffer.height; ++y)
+    for (uint32_t y = 0; y < buffer.height; ++y)
     {
         uint32_t *pixel = (uint32_t *)row;
-        for (int32_t x = 0; x < buffer.width; ++x)
+        for (uint32_t x = 0; x < buffer.width; ++x)
         {
             uint8_t color = texture[
                 (uint32_t)(y + y_offset) % TEX_HEIGHT
@@ -168,10 +168,10 @@ render_tunnel(
 {
     uint8_t *row = (uint8_t *)buffer.memory;
 
-    for (int32_t y = 0; y < buffer.height; ++y)
+    for (uint32_t y = 0; y < buffer.height; ++y)
     {
         uint32_t *pixel = (uint32_t *)row;
-        for (int32_t x = 0; x < buffer.width; ++x)
+        for (uint32_t x = 0; x < buffer.width; ++x)
         {
             uint8_t color = texture[
                 (uint32_t)(
@@ -237,10 +237,9 @@ render_tunnel(
 struct SDLWindowDimension
 sdl_get_window_dimension(SDL_Window *window)
 {
-    int w, h;
+    int w = 0;
+    int h = 0;
     SDL_GetWindowSize(window, &w, &h);
-    // SDLWindowDimension uses int32_t
-    assert(sizeof(int) <= sizeof(int32_t));
     struct SDLWindowDimension result = { .width = w, .height = h };
     return result;
 }
@@ -297,8 +296,8 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
 
     for (int32_t y = 0; y < transform.height; ++y)
     {
-        transform.distance_table[y] = malloc(transform.width * sizeof(int));
-        transform.angle_table[y] = malloc(transform.width * sizeof(int));
+        transform.distance_table[y] = malloc(transform.width * sizeof(int32_t));
+        transform.angle_table[y] = malloc(transform.width * sizeof(int32_t));
     }
 
     // Make distance and angle transformation tables
@@ -310,7 +309,7 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
             int32_t distance = (int32_t)(ratio * TEX_HEIGHT / sqrt(
                     (float)((x - width) * (x - width) + (y - height) * (y - height))
                 )) % TEX_HEIGHT;
-            int32_t angle = (uint32_t)(0.5 * TEX_WIDTH * atan2((float)(y - height), (float)(x - width)) / 3.1416);
+            int32_t angle = (int32_t)(0.5 * TEX_WIDTH * atan2((float)(y - height), (float)(x - width)) / 3.1416);
             transform.distance_table[y][x] = distance;
             transform.angle_table[y][x] = angle;
         }
