@@ -10,7 +10,7 @@ build_dir="./build"
 
 cc=clang
 source_files=("tunnel_runner.c")
-cflags=("-std=c99" "-Wall" "-Wextra" "-Wshadow" "-Wswitch-enum" "-Wno-missing-braces")
+cflags=("-std=c99" "-Wall" "-Wextra" "-Wshadow" "-Wsign-compare" "-Wswitch-enum" "-Wno-missing-braces")
 debug_flags=("-g" "-Og" "-Werror")
 release_flags=("-O2" "-Os" "-DTR_LOGLEVEL_DEBUG")
 # shellcheck disable=SC2207

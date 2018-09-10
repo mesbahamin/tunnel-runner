@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <inttypes.h>
 #include <SDL.h>
 #include <stdbool.h>
@@ -15,7 +16,8 @@
 #define CONTROLLER_STICK_MAX 32770
 #define CONTROLLER_STICK_MIN -32770
 
-#define SECOND 1000.0f
+// TODO: Should time be stored in a double of seconds?
+#define SECOND 1000
 #define FPS 60
 #define MS_PER_FRAME (SECOND / FPS)
 #define UPDATES_PER_SECOND 120
@@ -35,7 +37,7 @@
 #define TR_LOG_FRM(message, ...)
 #endif
 
-enum COLOR
+enum Color
 {
     COLOR_GREEN,
     COLOR_RED,
@@ -51,25 +53,25 @@ struct SDLOffscreenBuffer
     // pixels are always 32-bits wide. Memory order: BB GG RR XX.
     SDL_Texture *texture;
     void *memory;
-    int width;
-    int height;
-    int pitch;
+    int32_t width;
+    int32_t height;
+    int32_t pitch;
 };
 
 struct SDLWindowDimension
 {
-    int width;
-    int height;
+    int32_t width;
+    int32_t height;
 };
 
 struct TransformData
 {
-    int width;
-    int height;
-    int **distance_table;
-    int **angle_table;
-    int look_shift_x;
-    int look_shift_y;
+    int32_t width;
+    int32_t height;
+    int32_t **distance_table;
+    int32_t **angle_table;
+    int32_t look_shift_x;
+    int32_t look_shift_y;
 };
 
 static struct SDLOffscreenBuffer global_back_buffer;
@@ -92,22 +94,22 @@ void
 render_texture(
         struct SDLOffscreenBuffer buffer,
         uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
-        int x_offset,
-        int y_offset,
-        enum COLOR color_choice)
+        int32_t x_offset,
+        int32_t y_offset,
+        enum Color color_choice)
 {
     uint8_t *row = (uint8_t *)buffer.memory;
 
-    for (int y = 0; y < buffer.height; ++y)
+    for (int32_t y = 0; y < buffer.height; ++y)
     {
         uint32_t *pixel = (uint32_t *)row;
-        for (int x = 0; x < buffer.width; ++x)
+        for (int32_t x = 0; x < buffer.width; ++x)
         {
             uint8_t color = texture[
-                (unsigned int)(y + y_offset) % TEX_HEIGHT
+                (uint32_t)(y + y_offset) % TEX_HEIGHT
             ]
             [
-                (unsigned int)(x + x_offset) % TEX_WIDTH
+                (uint32_t)(x + x_offset) % TEX_WIDTH
             ];
             uint32_t red = color << 16;
             uint32_t green = color << 8;
@@ -160,26 +162,26 @@ void
 render_tunnel(
         struct SDLOffscreenBuffer buffer,
         uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
-        int rotation_offset,
-        int translation_offset,
-        char color_choice)
+        int32_t rotation_offset,
+        int32_t translation_offset,
+        enum Color color_choice)
 {
     uint8_t *row = (uint8_t *)buffer.memory;
 
-    for (int y = 0; y < buffer.height; ++y)
+    for (int32_t y = 0; y < buffer.height; ++y)
     {
         uint32_t *pixel = (uint32_t *)row;
-        for (int x = 0; x < buffer.width; ++x)
+        for (int32_t x = 0; x < buffer.width; ++x)
         {
             uint8_t color = texture[
-                (unsigned int)(
+                (uint32_t)(
                     transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x]
                     + translation_offset
                 )
                 % TEX_HEIGHT
             ]
             [
-                (unsigned int)(
+                (uint32_t)(
                     transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x]
                     + rotation_offset
                 )
@@ -235,14 +237,17 @@ render_tunnel(
 struct SDLWindowDimension
 sdl_get_window_dimension(SDL_Window *window)
 {
-    struct SDLWindowDimension result;
-    SDL_GetWindowSize(window, &result.width, &result.height);
-    return result ;
+    int w, h;
+    SDL_GetWindowSize(window, &w, &h);
+    // SDLWindowDimension uses int32_t
+    assert(sizeof(int) <= sizeof(int32_t));
+    struct SDLWindowDimension result = { .width = w, .height = h };
+    return result;
 }
 
 
 void
-sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int width, int height)
+sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int32_t width, int32_t height)
 {
     if (buffer->memory)
     {
@@ -256,7 +261,7 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
 
     if (transform.distance_table)
     {
-        for (int y = 0; y < transform.height; ++y)
+        for (int32_t y = 0; y < transform.height; ++y)
         {
             free(transform.distance_table[y]);
         }
@@ -264,7 +269,7 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
     }
     if (transform.angle_table)
     {
-        for (int y = 0; y < transform.height; ++y)
+        for (int32_t y = 0; y < transform.height; ++y)
         {
             free(transform.angle_table[y]);
         }
@@ -287,25 +292,25 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
     transform.height = 2 * height;
     transform.look_shift_x = width / 2;
     transform.look_shift_y = height / 2;
-    transform.distance_table = malloc(transform.height * sizeof(int *));
-    transform.angle_table = malloc(transform.height * sizeof(int *));
+    transform.distance_table = malloc(transform.height * sizeof(int32_t *));
+    transform.angle_table = malloc(transform.height * sizeof(int32_t *));
 
-    for (int y = 0; y < transform.height; ++y)
+    for (int32_t y = 0; y < transform.height; ++y)
     {
         transform.distance_table[y] = malloc(transform.width * sizeof(int));
         transform.angle_table[y] = malloc(transform.width * sizeof(int));
     }
 
     // Make distance and angle transformation tables
-    for (int y = 0; y < transform.height; ++y)
+    for (int32_t y = 0; y < transform.height; ++y)
     {
-        for (int x = 0; x < transform.width; ++x)
+        for (int32_t x = 0; x < transform.width; ++x)
         {
             float ratio = 32.0;
-            int distance = (int)(ratio * TEX_HEIGHT / sqrt(
+            int32_t distance = (int32_t)(ratio * TEX_HEIGHT / sqrt(
                     (float)((x - width) * (x - width) + (y - height) * (y - height))
                 )) % TEX_HEIGHT;
-            int angle = (unsigned int)(0.5 * TEX_WIDTH * atan2((float)(y - height), (float)(x - width)) / 3.1416);
+            int32_t angle = (uint32_t)(0.5 * TEX_WIDTH * atan2((float)(y - height), (float)(x - width)) / 3.1416);
             transform.distance_table[y][x] = distance;
             transform.angle_table[y][x] = angle;
         }
@@ -372,8 +377,8 @@ handle_event(SDL_Event *event)
 void
 sdl_open_game_controllers()
 {
-    int num_joysticks = SDL_NumJoysticks();
-    for (int controller_index = 0; controller_index < num_joysticks; ++controller_index)
+    int32_t num_joysticks = SDL_NumJoysticks();
+    for (int32_t controller_index = 0; controller_index < num_joysticks; ++controller_index)
     {
         if (!SDL_IsGameController(controller_index))
         {
@@ -400,7 +405,7 @@ sdl_open_game_controllers()
 void
 sdl_close_game_controllers()
 {
-    for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+    for (int32_t controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
     {
         if (controller_handles[controller_index])
         {
@@ -453,9 +458,9 @@ main(void)
 
             uint32_t texture[TEX_HEIGHT][TEX_WIDTH];
 
-            for (int y = 0; y < TEX_HEIGHT; ++y)
+            for (int32_t y = 0; y < TEX_HEIGHT; ++y)
             {
-                for (int x = 0; x < TEX_WIDTH; ++x)
+                for (int32_t x = 0; x < TEX_WIDTH; ++x)
                 {
                     // XOR texture:
                     texture[y][x] = (x * 256 / TEX_WIDTH) ^ (y * 256 / TEX_HEIGHT);
@@ -465,9 +470,9 @@ main(void)
             }
 
             bool running = true;
-            int rotation_offset = 0;
-            int translation_offset = 0;
-            enum COLOR color_choice = COLOR_WHITE;
+            int32_t rotation_offset = 0;
+            int32_t translation_offset = 0;
+            enum Color color_choice = COLOR_WHITE;
 
             uint64_t lag = 0;
             uint64_t previous_ms = get_current_time_ms();
@@ -481,6 +486,7 @@ main(void)
                 TR_LOG_FRM("Lag: %d\n", lag);
 
                 TR_LOG_FRM("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                // TODO: I don't think we need determinism
                 while (lag >= MS_PER_UPDATE)
                 {
                     SDL_Event event;
@@ -530,7 +536,7 @@ main(void)
                     }
 
 
-                    for (int controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+                    for (int32_t controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
                     {
                         if (SDL_GameControllerGetAttached(controller_handles[controller_index]))
                         {
@@ -592,13 +598,13 @@ main(void)
                             rotation_offset += stick_leftx / 5000;
                             translation_offset -= stick_lefty / 5000;
 
-                            int dampened_x_max = dimension.width / 2;
-                            int dampened_x_min = -(dimension.width / 2);
-                            int dampened_y_max = dimension.height / 2;
-                            int dampened_y_min = -(dimension.height / 2);
+                            int32_t dampened_x_max = dimension.width / 2;
+                            int32_t dampened_x_min = -(dimension.width / 2);
+                            int32_t dampened_y_max = dimension.height / 2;
+                            int32_t dampened_y_min = -(dimension.height / 2);
 
-                            int dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
-                            int dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
+                            int32_t dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
+                            int32_t dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
 
                             transform.look_shift_x = dimension.width / 2 + dampened_x;
                             transform.look_shift_y = dimension.height / 2 + dampened_y;
