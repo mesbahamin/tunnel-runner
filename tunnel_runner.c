@@ -175,24 +175,17 @@ render_tunnel(
         uint32_t *pixel = (uint32_t *)row;
         for (uint32_t x = 0; x < buffer.width; ++x)
         {
-            uint8_t color = texture[
-                (uint32_t)(
-                    transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x]
-                    + translation_offset
-                )
-                % TR_TEX_HEIGHT
-            ]
-            [
-                (uint32_t)(
-                    transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x]
-                    + rotation_offset
-                )
-                % TR_TEX_WIDTH
-            ];
+            uint32_t texel_y = (uint32_t)(transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x] + translation_offset) % TR_TEX_HEIGHT;
+            uint32_t texel_x = (uint32_t)(transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x] + rotation_offset) % TR_TEX_WIDTH;
 
-            uint32_t red = color << 16;
-            uint32_t green = color << 8;
-            uint32_t blue = color;
+            assert(texel_x >= 0 && texel_x < TR_TEX_WIDTH);
+            assert(texel_y >= 0 && texel_y < TR_TEX_HEIGHT);
+
+            uint8_t texel = texture[texel_y][texel_x];
+
+            uint32_t red = texel << 16;
+            uint32_t green = texel << 8;
+            uint32_t blue = texel;
 
             switch(color_choice)
             {
