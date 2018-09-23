@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <time.h>
 
+#define TR_PI32 3.14159265359f
+
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
 #define TEX_WIDTH 256
@@ -246,7 +248,7 @@ sdl_get_window_dimension(SDL_Window *window)
 
 
 void
-sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int32_t width, int32_t height)
+sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, int32_t window_width, int32_t window_height)
 {
     if (buffer->memory)
     {
@@ -279,18 +281,18 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
             renderer,
             SDL_PIXELFORMAT_ARGB8888,
             SDL_TEXTUREACCESS_STREAMING,
-            width, height);
+            window_width, window_height);
 
-    buffer->width = width;
-    buffer->height = height;
-    buffer->pitch = width * BYTES_PER_PIXEL;
+    buffer->width = window_width;
+    buffer->height = window_height;
+    buffer->pitch = window_width * BYTES_PER_PIXEL;
 
-    buffer->memory = malloc(width * height * BYTES_PER_PIXEL);
+    buffer->memory = malloc(window_width * window_height * BYTES_PER_PIXEL);
 
-    transform.width = 2 * width;
-    transform.height = 2 * height;
-    transform.look_shift_x = width / 2;
-    transform.look_shift_y = height / 2;
+    transform.width = 2 * window_width;
+    transform.height = 2 * window_height;
+    transform.look_shift_x = window_width / 2;
+    transform.look_shift_y = window_height / 2;
     transform.distance_table = malloc(transform.height * sizeof(int32_t *));
     transform.angle_table = malloc(transform.height * sizeof(int32_t *));
 
@@ -305,13 +307,14 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
     {
         for (int32_t x = 0; x < transform.width; ++x)
         {
-            float ratio = 32.0;
-            int32_t distance = (int32_t)(ratio * TEX_HEIGHT / sqrt(
-                    (float)((x - width) * (x - width) + (y - height) * (y - height))
-                )) % TEX_HEIGHT;
-            int32_t angle = (int32_t)(0.5 * TEX_WIDTH * atan2((float)(y - height), (float)(x - width)) / 3.1416);
-            transform.distance_table[y][x] = distance;
-            transform.angle_table[y][x] = angle;
+            int32_t dist_from_center_x = x - window_width;
+            int32_t dist_from_center_y = y - window_height;
+            float dist_from_center = sqrtf((float)(dist_from_center_x * dist_from_center_x + dist_from_center_y * dist_from_center_y));
+            float angle_from_positive_x_axis = atan2f((float)dist_from_center_y, (float)dist_from_center_x) / TR_PI32;
+
+            float ratio = 32.0f;
+            transform.distance_table[y][x] = (int32_t)(ratio * TEX_HEIGHT / dist_from_center) % TEX_HEIGHT;
+            transform.angle_table[y][x] = (int32_t)(0.5f * TEX_WIDTH * angle_from_positive_x_axis);
         }
     }
 }
