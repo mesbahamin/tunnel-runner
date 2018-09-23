@@ -8,22 +8,22 @@
 
 #define TR_PI32 3.14159265359f
 
-#define SCREEN_WIDTH 640
-#define SCREEN_HEIGHT 480
-#define TEX_WIDTH 256
-#define TEX_HEIGHT 256
-#define BYTES_PER_PIXEL 4
-#define MAX_CONTROLLERS 4
-#define MOVEMENT_SPEED 5
-#define CONTROLLER_STICK_MAX 32770
-#define CONTROLLER_STICK_MIN -32770
+#define TR_SCREEN_WIDTH 640
+#define TR_SCREEN_HEIGHT 480
+#define TR_TEX_WIDTH 256
+#define TR_TEX_HEIGHT 256
+#define TR_BYTES_PER_PIXEL 4
+#define TR_MAX_CONTROLLERS 4
+#define TR_MOVEMENT_SPEED 5
+#define TR_CONTROLLER_STICK_MAX 32770
+#define TR_CONTROLLER_STICK_MIN -32770
 
 // TODO: Should time be stored in a double of seconds?
-#define SECOND 1000
-#define FPS 60
-#define MS_PER_FRAME (SECOND / FPS)
-#define UPDATES_PER_SECOND 120
-#define MS_PER_UPDATE (SECOND / UPDATES_PER_SECOND)
+#define TR_SECOND 1000
+#define TR_FPS 60
+#define TR_MS_PER_FRAME (TR_SECOND / TR_FPS)
+#define TR_UPDATES_PER_SECOND 120
+#define TR_MS_PER_UPDATE (TR_SECOND / TR_UPDATES_PER_SECOND)
 
 #define TR_LOG_ERR(message, ...) fprintf(stderr, (message), ##__VA_ARGS__)
 
@@ -77,8 +77,8 @@ struct TransformData
 };
 
 static struct SDLOffscreenBuffer global_back_buffer;
-static SDL_GameController *controller_handles[MAX_CONTROLLERS];
-static SDL_Haptic *rumble_handles[MAX_CONTROLLERS];
+static SDL_GameController *controller_handles[TR_MAX_CONTROLLERS];
+static SDL_Haptic *rumble_handles[TR_MAX_CONTROLLERS];
 static struct TransformData transform;
 
 
@@ -95,7 +95,7 @@ get_current_time_ms(void)
 void
 render_texture(
         struct SDLOffscreenBuffer buffer,
-        uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
+        uint32_t texture[TR_TEX_HEIGHT][TR_TEX_WIDTH],
         int32_t x_offset,
         int32_t y_offset,
         enum Color color_choice)
@@ -108,10 +108,10 @@ render_texture(
         for (uint32_t x = 0; x < buffer.width; ++x)
         {
             uint8_t color = texture[
-                (uint32_t)(y + y_offset) % TEX_HEIGHT
+                (uint32_t)(y + y_offset) % TR_TEX_HEIGHT
             ]
             [
-                (uint32_t)(x + x_offset) % TEX_WIDTH
+                (uint32_t)(x + x_offset) % TR_TEX_WIDTH
             ];
             uint32_t red = color << 16;
             uint32_t green = color << 8;
@@ -163,7 +163,7 @@ render_texture(
 void
 render_tunnel(
         struct SDLOffscreenBuffer buffer,
-        uint32_t texture[TEX_HEIGHT][TEX_WIDTH],
+        uint32_t texture[TR_TEX_HEIGHT][TR_TEX_WIDTH],
         int32_t rotation_offset,
         int32_t translation_offset,
         enum Color color_choice)
@@ -180,14 +180,14 @@ render_tunnel(
                     transform.distance_table[y + transform.look_shift_y][x + transform.look_shift_x]
                     + translation_offset
                 )
-                % TEX_HEIGHT
+                % TR_TEX_HEIGHT
             ]
             [
                 (uint32_t)(
                     transform.angle_table[y + transform.look_shift_y][x + transform.look_shift_x]
                     + rotation_offset
                 )
-                % TEX_WIDTH
+                % TR_TEX_WIDTH
             ];
 
             uint32_t red = color << 16;
@@ -285,9 +285,9 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
 
     buffer->width = window_width;
     buffer->height = window_height;
-    buffer->pitch = window_width * BYTES_PER_PIXEL;
+    buffer->pitch = window_width * TR_BYTES_PER_PIXEL;
 
-    buffer->memory = malloc(window_width * window_height * BYTES_PER_PIXEL);
+    buffer->memory = malloc(window_width * window_height * TR_BYTES_PER_PIXEL);
 
     transform.width = 2 * window_width;
     transform.height = 2 * window_height;
@@ -313,8 +313,8 @@ sdl_resize_texture(struct SDLOffscreenBuffer *buffer, SDL_Renderer *renderer, in
             float angle_from_positive_x_axis = atan2f((float)dist_from_center_y, (float)dist_from_center_x) / TR_PI32;
 
             float ratio = 32.0f;
-            transform.distance_table[y][x] = (int32_t)(ratio * TEX_HEIGHT / dist_from_center) % TEX_HEIGHT;
-            transform.angle_table[y][x] = (int32_t)(0.5f * TEX_WIDTH * angle_from_positive_x_axis);
+            transform.distance_table[y][x] = (int32_t)(ratio * TR_TEX_HEIGHT / dist_from_center) % TR_TEX_HEIGHT;
+            transform.angle_table[y][x] = (int32_t)(0.5f * TR_TEX_WIDTH * angle_from_positive_x_axis);
         }
     }
 }
@@ -387,7 +387,7 @@ sdl_open_game_controllers()
             continue;
         }
 
-        if (controller_index >= MAX_CONTROLLERS)
+        if (controller_index >= TR_MAX_CONTROLLERS)
         {
             break;
         }
@@ -407,7 +407,7 @@ sdl_open_game_controllers()
 void
 sdl_close_game_controllers()
 {
-    for (int32_t controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+    for (int32_t controller_index = 0; controller_index < TR_MAX_CONTROLLERS; ++controller_index)
     {
         if (controller_handles[controller_index])
         {
@@ -445,8 +445,8 @@ main(void)
             "Tunnel Runner",
             SDL_WINDOWPOS_UNDEFINED,
             SDL_WINDOWPOS_UNDEFINED,
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
+            TR_SCREEN_WIDTH,
+            TR_SCREEN_HEIGHT,
             0);
 
     if (window)
@@ -458,14 +458,14 @@ main(void)
             struct SDLWindowDimension dimension = sdl_get_window_dimension(window);
             sdl_resize_texture(&global_back_buffer, renderer, dimension.width, dimension.height);
 
-            uint32_t texture[TEX_HEIGHT][TEX_WIDTH];
+            uint32_t texture[TR_TEX_HEIGHT][TR_TEX_WIDTH];
 
-            for (int32_t y = 0; y < TEX_HEIGHT; ++y)
+            for (int32_t y = 0; y < TR_TEX_HEIGHT; ++y)
             {
-                for (int32_t x = 0; x < TEX_WIDTH; ++x)
+                for (int32_t x = 0; x < TR_TEX_WIDTH; ++x)
                 {
                     // XOR texture:
-                    texture[y][x] = (x * 256 / TEX_WIDTH) ^ (y * 256 / TEX_HEIGHT);
+                    texture[y][x] = (x * 256 / TR_TEX_WIDTH) ^ (y * 256 / TR_TEX_HEIGHT);
                     // Mosaic texture:
                     //texture[y][x] = (x * x * y * y);
                 }
@@ -487,9 +487,9 @@ main(void)
                 lag += elapsed_ms;
                 TR_LOG_FRM("Lag: %d\n", lag);
 
-                TR_LOG_FRM("%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                TR_LOG_FRM("%" PRIu64 ", %f\n", lag, TR_MS_PER_UPDATE);
                 // TODO: I don't think we need determinism
-                while (lag >= MS_PER_UPDATE)
+                while (lag >= TR_MS_PER_UPDATE)
                 {
                     SDL_Event event;
 
@@ -506,19 +506,19 @@ main(void)
 
                     if (keystate[SDL_SCANCODE_A])
                     {
-                        rotation_offset -= MOVEMENT_SPEED;
+                        rotation_offset -= TR_MOVEMENT_SPEED;
                     }
                     if (keystate[SDL_SCANCODE_D])
                     {
-                        rotation_offset += MOVEMENT_SPEED;
+                        rotation_offset += TR_MOVEMENT_SPEED;
                     }
                     if (keystate[SDL_SCANCODE_W])
                     {
-                        translation_offset += MOVEMENT_SPEED;
+                        translation_offset += TR_MOVEMENT_SPEED;
                     }
                     if (keystate[SDL_SCANCODE_S])
                     {
-                        translation_offset -= MOVEMENT_SPEED;
+                        translation_offset -= TR_MOVEMENT_SPEED;
                     }
                     if (keystate[SDL_SCANCODE_LEFT])
                     {
@@ -538,7 +538,7 @@ main(void)
                     }
 
 
-                    for (int32_t controller_index = 0; controller_index < MAX_CONTROLLERS; ++controller_index)
+                    for (int32_t controller_index = 0; controller_index < TR_MAX_CONTROLLERS; ++controller_index)
                     {
                         if (SDL_GameControllerGetAttached(controller_handles[controller_index]))
                         {
@@ -605,8 +605,8 @@ main(void)
                             int32_t dampened_y_max = dimension.height / 2;
                             int32_t dampened_y_min = -(dimension.height / 2);
 
-                            int32_t dampened_x = (stick_rightx - CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_x_min;
-                            int32_t dampened_y = (stick_righty - CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (CONTROLLER_STICK_MAX - CONTROLLER_STICK_MIN) + dampened_y_min;
+                            int32_t dampened_x = (stick_rightx - TR_CONTROLLER_STICK_MIN) * (dampened_x_max - dampened_x_min) / (TR_CONTROLLER_STICK_MAX - TR_CONTROLLER_STICK_MIN) + dampened_x_min;
+                            int32_t dampened_y = (stick_righty - TR_CONTROLLER_STICK_MIN) * (dampened_y_max - dampened_y_min) / (TR_CONTROLLER_STICK_MAX - TR_CONTROLLER_STICK_MIN) + dampened_y_min;
 
                             transform.look_shift_x = dimension.width / 2 + dampened_x;
                             transform.look_shift_y = dimension.height / 2 + dampened_y;
@@ -616,16 +616,16 @@ main(void)
                     }
                     TR_LOG_FRM("%d, %d\n", translation_offset, rotation_offset);
 
-                    TR_LOG_FRM("\t%" PRIu64 ", %f\n", lag, MS_PER_UPDATE);
+                    TR_LOG_FRM("\t%" PRIu64 ", %f\n", lag, TR_MS_PER_UPDATE);
                     //render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
-                    lag -= MS_PER_UPDATE;
+                    lag -= TR_MS_PER_UPDATE;
                 }
                 render_tunnel(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                 //render_texture(global_back_buffer, texture, rotation_offset, translation_offset, color_choice);
                 sdl_update_window(renderer, global_back_buffer);
-                if (elapsed_ms <= MS_PER_FRAME)
+                if (elapsed_ms <= TR_MS_PER_FRAME)
                 {
-                    SDL_Delay((MS_PER_FRAME - elapsed_ms));
+                    SDL_Delay((TR_MS_PER_FRAME - elapsed_ms));
                 }
             }
         }
